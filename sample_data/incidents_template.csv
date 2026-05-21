@@ -1,0 +1,11 @@
+date,department,incident_type,severity,description,days_lost,status
+2026-01-08,Warehouse,Injury,Recordable,Slip on wet floor,3,Closed
+2026-01-22,Assembly,Near Miss,First Aid,Tool dropped from height,0,Closed
+2026-02-05,Shipping,Injury,Lost Time,Back strain lifting pallet,8,Open
+2026-02-19,Warehouse,Property Damage,First Aid,Forklift struck racking,0,Closed
+2026-03-03,Assembly,Spill,Recordable,Chemical spill contained quickly,1,Closed
+2026-03-27,Shipping,Near Miss,First Aid,Pedestrian near forklift path,0,Open
+2026-04-10,Warehouse,Injury,Recordable,Hand laceration on packaging,2,Open
+2026-04-24,Maintenance,Injury,Lost Time,Fall from ladder,12,Open
+2026-05-06,Assembly,Near Miss,First Aid,Machine guard left open,0,Closed
+2026-05-15,Shipping,Property Damage,First Aid,Pallet jack damaged door,0,Open

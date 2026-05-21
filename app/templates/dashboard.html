@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Safety Metrics{% endblock %}
+
+{% block content %}
+<h1>Safety KPIs</h1>
+
+{% if not has_data %}
+  <div class="empty-state">
+    <p>No safety data yet.</p>
+    <p><a href="/upload">Upload a spreadsheet</a> to see your KPIs and trends.</p>
+  </div>
+{% else %}
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-value">{{ metrics.total_incidents }}</div>
+      <div class="kpi-label">Total Incidents</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">{{ metrics.incidents_last_30_days }}</div>
+      <div class="kpi-label">Last 30 Days</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">
+        {{ metrics.days_since_last_incident if metrics.days_since_last_incident is not none else '—' }}
+      </div>
+      <div class="kpi-label">Days Since Last Incident</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">{{ metrics.lost_time_count }}</div>
+      <div class="kpi-label">Lost Time Incidents</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">{{ metrics.total_lost_days | round(1) }}</div>
+      <div class="kpi-label">Total Lost Workdays</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">{{ metrics.open_corrective_actions }}</div>
+      <div class="kpi-label">Open Corrective Actions</div>
+    </div>
+  </section>
+
+  <section class="chart-grid">
+    <div class="chart-card wide">
+      <h2>Monthly Incident Trend</h2>
+      <canvas id="trendChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>Incidents by Type</h2>
+      <canvas id="typeChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>Incidents by Severity</h2>
+      <canvas id="severityChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>Incidents by Department</h2>
+      <canvas id="deptChart"></canvas>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if has_data %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script id="metrics-data" type="application/json">{{ metrics | tojson }}</script>
+<script>
+  const metrics = JSON.parse(document.getElementById('metrics-data').textContent);
+  const palette = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
+                   '#0891b2', '#db2777', '#65a30d', '#9333ea', '#0d9488'];
+  const countAxis = { beginAtZero: true, ticks: { precision: 0 } };
+
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: metrics.monthly_trend.labels,
+      datasets: [{
+        label: 'Incidents',
+        data: metrics.monthly_trend.counts,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.15)',
+        fill: true,
+        tension: 0.3,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: countAxis },
+    },
+  });
+
+  function barChart(canvasId, chartData) {
+    new Chart(document.getElementById(canvasId), {
+      type: 'bar',
+      data: {
+        labels: chartData.labels,
+        datasets: [{ data: chartData.counts, backgroundColor: palette }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: countAxis },
+      },
+    });
+  }
+
+  barChart('typeChart', metrics.by_type);
+  barChart('deptChart', metrics.by_department);
+
+  new Chart(document.getElementById('severityChart'), {
+    type: 'doughnut',
+    data: {
+      labels: metrics.by_severity.labels,
+      datasets: [{ data: metrics.by_severity.counts, backgroundColor: palette }],
+    },
+    options: { responsive: true },
+  });
+</script>
+{% endif %}
+{% endblock %}

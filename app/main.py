@@ -2,10 +2,11 @@ import os
 import secrets
 import warnings
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,6 +23,7 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_db, init_db
+from app.export import generate_csv, generate_pdf
 from app.ingest import ALL_COLUMNS, IngestError, parse_spreadsheet
 from app.metrics import compute_metrics
 from app.models import ROLE_ADMIN, VALID_ROLES, Incident, Upload, User
@@ -261,6 +263,37 @@ def download_template(_user: User = Depends(require_user)):
         TEMPLATE_FILE,
         media_type="text/csv",
         filename="incidents_template.csv",
+    )
+
+
+# ---------- Exports ----------
+
+
+@app.get("/export/csv")
+def export_csv(
+    _user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    data = generate_csv(db)
+    filename = f"safety_metrics_incidents_{date.today().isoformat()}.csv"
+    return Response(
+        content=data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/pdf")
+def export_pdf(
+    _user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    data = generate_pdf(db)
+    filename = f"safety_metrics_report_{date.today().isoformat()}.pdf"
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

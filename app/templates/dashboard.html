@@ -2,7 +2,15 @@
 {% block title %}Dashboard - Safety Metrics{% endblock %}
 
 {% block content %}
-<h1>Safety KPIs</h1>
+<div class="page-header">
+  <h1>Safety KPIs</h1>
+  {% if has_data %}
+  <div class="export-bar">
+    <a class="btn-secondary" href="/export/csv">Download CSV</a>
+    <a class="btn-secondary" href="/export/pdf">Download PDF report</a>
+  </div>
+  {% endif %}
+</div>
 
 {% if not has_data %}
   <div class="empty-state">

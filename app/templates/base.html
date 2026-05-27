@@ -10,8 +10,17 @@
   <header class="topbar">
     <div class="brand">Safety Metrics Dashboard</div>
     <nav>
-      <a href="/">Dashboard</a>
-      <a href="/upload">Upload Data</a>
+      {% if user %}
+        <a href="/">Dashboard</a>
+        {% if user.role == 'admin' %}
+          <a href="/upload">Upload Data</a>
+          <a href="/users">Users</a>
+        {% endif %}
+        <span class="user-info">{{ user.username }} ({{ user.role }})</span>
+        <form action="/logout" method="post" class="inline-form">
+          <button class="link-btn" type="submit">Log out</button>
+        </form>
+      {% endif %}
     </nav>
   </header>
   <main>

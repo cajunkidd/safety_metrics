@@ -5,6 +5,20 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+ROLE_ADMIN = "admin"
+ROLE_VIEWER = "viewer"
+VALID_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, nullable=False, unique=True)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False, default=ROLE_VIEWER)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class Upload(Base):
     __tablename__ = "uploads"

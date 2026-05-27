@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Incidents - Safety Metrics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>All Incidents ({{ incidents | length }})</h1>
+  <div class="export-bar">
+    <a class="btn-secondary" href="/submit">Submit new incident</a>
+  </div>
+</div>
+
+{% if incidents %}
+<section class="card">
+  <table class="incident-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Store</th>
+        <th>Type</th>
+        <th>Recordable</th>
+        <th>Reporter</th>
+        <th>Summary</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inc in incidents %}
+      <tr>
+        <td>{{ inc.incident_date.isoformat() if inc.incident_date else '—' }}</td>
+        <td>{{ inc.store_location or '—' }}</td>
+        <td>{{ inc.incident_type or '—' }}</td>
+        <td>
+          {% if inc.recordable %}
+            <span class="pill pill-red">Yes</span>
+          {% else %}
+            <span class="pill pill-grey">No</span>
+          {% endif %}
+        </td>
+        <td>{{ inc.reporter or '—' }}</td>
+        <td class="summary-cell">{{ (inc.summary or '')[:80] }}{% if (inc.summary or '') | length > 80 %}…{% endif %}</td>
+        <td><a class="row-action" href="/incidents/{{ inc.id }}">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<div class="empty-state">
+  <p>No incidents recorded yet.</p>
+  <p>
+    <a href="/submit">Submit a new incident</a>
+    {% if user.role == 'admin' %}or <a href="/upload">upload a spreadsheet</a>{% endif %}.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

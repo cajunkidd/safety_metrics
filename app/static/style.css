@@ -240,3 +240,47 @@ th { color: var(--muted); font-weight: 600; }
   align-items: center;
   margin: 20px 0;
 }
+
+/* Incident list & detail */
+.incident-table .summary-cell {
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 350px;
+}
+.row-action {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.row-action:hover { text-decoration: underline; }
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.pill-red { background: #fee2e2; color: #991b1b; }
+.pill-grey { background: #e5e7eb; color: #475569; }
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.detail-list dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.detail-list dd {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .detail-list { grid-template-columns: 1fr; }
+  .detail-list dd { margin-bottom: 8px; }
+}

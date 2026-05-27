@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Incident{% if incident %} #{{ incident.id }}{% endif %} - Safety Metrics{% endblock %}
+
+{% block content %}
+{% if incident is none %}
+  <div class="alert alert-error">Incident not found.</div>
+  <p><a href="/incidents">← Back to all incidents</a></p>
+{% else %}
+<div class="page-header">
+  <div>
+    <h1>Incident #{{ incident.id }}</h1>
+    <p class="hint">
+      {{ incident.incident_date.isoformat() if incident.incident_date else 'No date' }}
+      · {{ incident.store_location or '—' }}
+      · {{ incident.incident_type or '—' }}
+      {% if incident.recordable %}<span class="pill pill-red">Recordable</span>
+      {% else %}<span class="pill pill-grey">Not recordable</span>{% endif %}
+    </p>
+  </div>
+  <div class="export-bar">
+    <a class="btn-secondary" href="/incidents">← All incidents</a>
+    {% if user.role == 'admin' %}
+    <form action="/incidents/{{ incident.id }}/delete" method="post" class="inline-form"
+          onsubmit="return confirm('Delete this incident permanently?');">
+      <button type="submit" class="btn-danger">Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% for section in sections_with_values %}
+<section class="card">
+  <h2>{{ section.title }}</h2>
+  <dl class="detail-list">
+    {% for row in section.rows %}
+    <dt>{{ row.label }}</dt>
+    <dd>{{ row.value }}</dd>
+    {% endfor %}
+  </dl>
+</section>
+{% endfor %}
+
+{% if extra %}
+<section class="card">
+  <h2>Additional fields</h2>
+  <p class="hint">Extra columns from the source data not in the standard submission form.</p>
+  <dl class="detail-list">
+    {% for row in extra %}
+    <dt>{{ row.label }}</dt>
+    <dd>{{ row.value }}</dd>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+{% if not sections_with_values and not extra %}
+<div class="empty-state">
+  <p>No detail captured for this incident beyond the typed fields.</p>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

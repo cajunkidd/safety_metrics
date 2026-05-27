@@ -190,6 +190,91 @@ def api_metrics(
     return compute_metrics(db)
 
 
+# ---------- Incidents list + detail ----------
+
+
+@app.get("/incidents", response_class=HTMLResponse)
+def incidents_list(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    incidents = (
+        db.query(Incident)
+        .order_by(Incident.incident_date.desc(), Incident.id.desc())
+        .all()
+    )
+    return _render(
+        request,
+        "incidents.html",
+        {"user": user, "incidents": incidents},
+    )
+
+
+@app.get("/incidents/{incident_id}", response_class=HTMLResponse)
+def incident_detail(
+    incident_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    incident = db.get(Incident, incident_id)
+    if incident is None:
+        return _render(
+            request,
+            "incident_detail.html",
+            {"user": user, "incident": None, "sections_with_values": [], "extra": []},
+            status_code=404,
+        )
+
+    raw = incident.raw_data or {}
+
+    # Group values using the same section structure as the submit form.
+    sections_with_values = []
+    used_keys = set()
+    for section in INCIDENT_FORM_SECTIONS:
+        rows = []
+        for field in section["fields"]:
+            value = raw.get(field["name"])
+            if value:
+                rows.append({"label": field["label"], "value": value})
+                used_keys.add(field["name"])
+        if rows:
+            sections_with_values.append({"title": section["title"], "rows": rows})
+
+    # Anything else stored in raw_data that isn't in the form definition
+    # (e.g., extra columns from an uploaded spreadsheet).
+    extra = [
+        {"label": k, "value": v}
+        for k, v in raw.items()
+        if k not in used_keys
+    ]
+
+    return _render(
+        request,
+        "incident_detail.html",
+        {
+            "user": user,
+            "incident": incident,
+            "sections_with_values": sections_with_values,
+            "extra": extra,
+        },
+    )
+
+
+@app.post("/incidents/{incident_id}/delete")
+def delete_incident(
+    incident_id: int,
+    _user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    incident = db.get(Incident, incident_id)
+    if incident is not None:
+        db.delete(incident)
+        db.commit()
+    return RedirectResponse("/incidents", status_code=303)
+
+
 # ---------- Submit a single incident ----------
 
 

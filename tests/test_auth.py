@@ -1,35 +1,4 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from app.auth import hash_password, verify_password
-from app.database import Base, get_db
-from app.main import app
-from app.models import User
-
-
-@pytest.fixture
-def client(tmp_path):
-    db_file = tmp_path / "test.db"
-    engine = create_engine(
-        f"sqlite:///{db_file}", connect_args={"check_same_thread": False}
-    )
-    Base.metadata.create_all(engine)
-    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-    def override_get_db():
-        db = TestingSession()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    # Do NOT use `with TestClient(...)` here — that triggers the lifespan
-    # which calls init_db() against the real database URL.
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def _setup_admin(client, username="admin", password="adminpass1"):

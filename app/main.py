@@ -1,19 +1,43 @@
+import os
+import secrets
+import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.auth import (
+    AuthRedirect,
+    SetupRequired,
+    get_current_user,
+    hash_password,
+    require_admin,
+    require_user,
+    verify_password,
+)
 from app.database import get_db, init_db
 from app.ingest import ALL_COLUMNS, IngestError, parse_spreadsheet
 from app.metrics import compute_metrics
-from app.models import Incident, Upload
+from app.models import ROLE_ADMIN, VALID_ROLES, Incident, Upload, User
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE_FILE = BASE_DIR.parent / "sample_data" / "incidents_template.csv"
+
+SECRET_KEY = os.environ.get("SAFETY_METRICS_SECRET_KEY")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_urlsafe(32)
+    warnings.warn(
+        "SAFETY_METRICS_SECRET_KEY is not set. Using a random key; "
+        "sessions will not persist across restarts.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 @asynccontextmanager
@@ -23,17 +47,128 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Safety Metrics Dashboard", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
+@app.exception_handler(AuthRedirect)
+async def _auth_redirect_handler(request: Request, exc: AuthRedirect):
+    return RedirectResponse(url="/login", status_code=303)
+
+
+@app.exception_handler(SetupRequired)
+async def _setup_required_handler(request: Request, exc: SetupRequired):
+    return RedirectResponse(url="/setup", status_code=303)
+
+
+def _render(request: Request, name: str, context: dict, status_code: int = 200):
+    return templates.TemplateResponse(request, name, context, status_code=status_code)
+
+
+# ---------- Setup (one-time, creates first admin) ----------
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def setup_form(request: Request, db: Session = Depends(get_db)):
+    if db.query(User).first() is not None:
+        return RedirectResponse("/login", status_code=303)
+    return _render(request, "setup.html", {"user": None})
+
+
+@app.post("/setup", response_class=HTMLResponse)
+async def setup_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if db.query(User).first() is not None:
+        return RedirectResponse("/login", status_code=303)
+
+    username = username.strip()
+    if not username:
+        return _render(
+            request,
+            "setup.html",
+            {"user": None, "error": "Username is required."},
+            status_code=400,
+        )
+    if len(password) < 8:
+        return _render(
+            request,
+            "setup.html",
+            {"user": None, "error": "Password must be at least 8 characters."},
+            status_code=400,
+        )
+
+    user = User(
+        username=username, password_hash=hash_password(password), role=ROLE_ADMIN
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    request.session["user_id"] = user.id
+    return RedirectResponse("/", status_code=303)
+
+
+# ---------- Login / logout ----------
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(
+    request: Request, user: Optional[User] = Depends(get_current_user)
+):
+    if user is not None:
+        return RedirectResponse("/", status_code=303)
+    return _render(request, "login.html", {"user": None})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if user is not None:
+        return RedirectResponse("/", status_code=303)
+
+    db_user = db.query(User).filter(User.username == username.strip()).first()
+    if db_user is None or not verify_password(password, db_user.password_hash):
+        return _render(
+            request,
+            "login.html",
+            {"user": None, "error": "Invalid username or password."},
+            status_code=401,
+        )
+
+    request.session["user_id"] = db_user.id
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/logout")
+def logout(request: Request, _user: User = Depends(require_user)):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
+
+
+# ---------- Dashboard / metrics ----------
+
+
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db)):
+def dashboard(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     metrics = compute_metrics(db)
-    return templates.TemplateResponse(
+    return _render(
         request,
         "dashboard.html",
         {
+            "user": user,
             "metrics": metrics,
             "has_data": metrics["total_incidents"] > 0,
         },
@@ -41,17 +176,27 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/api/metrics", response_class=JSONResponse)
-def api_metrics(db: Session = Depends(get_db)):
+def api_metrics(
+    _user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     return compute_metrics(db)
 
 
+# ---------- Upload (admin only) ----------
+
+
 @app.get("/upload", response_class=HTMLResponse)
-def upload_form(request: Request, db: Session = Depends(get_db)):
+def upload_form(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     uploads = db.query(Upload).order_by(Upload.uploaded_at.desc()).all()
-    return templates.TemplateResponse(
+    return _render(
         request,
         "upload.html",
-        {"uploads": uploads, "expected_columns": ALL_COLUMNS},
+        {"user": user, "uploads": uploads, "expected_columns": ALL_COLUMNS},
     )
 
 
@@ -59,10 +204,11 @@ def upload_form(request: Request, db: Session = Depends(get_db)):
 async def upload_file(
     request: Request,
     file: UploadFile = File(...),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     content = await file.read()
-    context = {"expected_columns": ALL_COLUMNS}
+    context = {"user": user, "expected_columns": ALL_COLUMNS}
 
     if not content:
         context["error"] = "The uploaded file is empty."
@@ -93,11 +239,15 @@ async def upload_file(
     context["uploads"] = (
         db.query(Upload).order_by(Upload.uploaded_at.desc()).all()
     )
-    return templates.TemplateResponse(request, "upload.html", context)
+    return _render(request, "upload.html", context)
 
 
 @app.post("/uploads/{upload_id}/delete")
-def delete_upload(upload_id: int, db: Session = Depends(get_db)):
+def delete_upload(
+    upload_id: int,
+    _user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     upload = db.get(Upload, upload_id)
     if upload:
         db.delete(upload)
@@ -106,9 +256,72 @@ def delete_upload(upload_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/template")
-def download_template():
+def download_template(_user: User = Depends(require_user)):
     return FileResponse(
         TEMPLATE_FILE,
         media_type="text/csv",
         filename="incidents_template.csv",
     )
+
+
+# ---------- User management (admin only) ----------
+
+
+@app.get("/users", response_class=HTMLResponse)
+def users_page(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    users = db.query(User).order_by(User.username).all()
+    return _render(request, "users.html", {"user": user, "users": users})
+
+
+@app.post("/users", response_class=HTMLResponse)
+async def create_user(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    username = username.strip()
+    error = None
+    if not username:
+        error = "Username is required."
+    elif len(password) < 8:
+        error = "Password must be at least 8 characters."
+    elif role not in VALID_ROLES:
+        error = "Invalid role."
+    elif db.query(User).filter(User.username == username).first() is not None:
+        error = f"Username '{username}' is already taken."
+
+    if error:
+        users = db.query(User).order_by(User.username).all()
+        return _render(
+            request,
+            "users.html",
+            {"user": user, "users": users, "error": error},
+            status_code=400,
+        )
+
+    db.add(
+        User(username=username, password_hash=hash_password(password), role=role)
+    )
+    db.commit()
+    return RedirectResponse("/users", status_code=303)
+
+
+@app.post("/users/{user_id}/delete")
+def delete_user(
+    user_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if user_id != user.id:
+        target = db.get(User, user_id)
+        if target is not None:
+            db.delete(target)
+            db.commit()
+    return RedirectResponse("/users", status_code=303)

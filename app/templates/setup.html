@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Setup - Safety Metrics{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <h1>Welcome — create the first admin user</h1>
+  <p class="hint">This is a one-time setup step. The account you create here will have full admin access.</p>
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <section class="card">
+    <form action="/setup" method="post">
+      <div class="form-row">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-row">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required minlength="8">
+        <span class="hint">At least 8 characters.</span>
+      </div>
+      <button type="submit">Create admin and continue</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

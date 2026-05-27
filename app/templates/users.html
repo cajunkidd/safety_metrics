@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Users - Safety Metrics{% endblock %}
+
+{% block content %}
+<h1>Users</h1>
+
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>Add a user</h2>
+  <form action="/users" method="post" class="user-form">
+    <div class="form-row">
+      <label for="new-username">Username</label>
+      <input type="text" id="new-username" name="username" required>
+    </div>
+    <div class="form-row">
+      <label for="new-password">Password</label>
+      <input type="password" id="new-password" name="password" required minlength="8">
+    </div>
+    <div class="form-row">
+      <label for="new-role">Role</label>
+      <select id="new-role" name="role">
+        <option value="viewer">Viewer (read-only)</option>
+        <option value="admin">Admin (upload & manage users)</option>
+      </select>
+    </div>
+    <button type="submit">Add user</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>All users</h2>
+  <table>
+    <thead>
+      <tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ u.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+        <td>
+          {% if u.id != user.id %}
+          <form action="/users/{{ u.id }}/delete" method="post"
+                onsubmit="return confirm('Delete user {{ u.username }}?');">
+            <button type="submit" class="btn-danger">Delete</button>
+          </form>
+          {% else %}
+          <span class="hint">(you)</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

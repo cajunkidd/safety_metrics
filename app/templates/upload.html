@@ -22,19 +22,22 @@
 {% endif %}
 
 <section class="card">
-  <h2>Upload a file</h2>
-  <p>Accepted formats: CSV (<code>.csv</code>) or Excel (<code>.xlsx</code>).
-     For Google Sheets, use <em>File → Download → CSV or Excel</em>.</p>
+  <h2>Upload an incident form export</h2>
+  <p>Upload the safety manager's incident form spreadsheet
+     (<code>.xlsx</code> preferred; <code>.csv</code> also accepted).
+     The app reads each row as one incident report.</p>
   <form action="/upload" method="post" enctype="multipart/form-data">
     <input type="file" name="file" accept=".csv,.xlsx,.xls" required>
     <button type="submit">Upload</button>
   </form>
   <p class="hint">
-    Expected columns: <code>{{ expected_columns | join(', ') }}</code><br>
-    Required: <code>date</code>, <code>department</code>,
-    <code>incident_type</code>, <code>severity</code>.
+    Required columns (matched by exact header text):
+    <ul>
+      {% for col in required_columns %}<li><code>{{ col }}</code></li>{% endfor %}
+    </ul>
+    Other form fields are imported automatically when present.
   </p>
-  <p><a href="/template">Download CSV template</a></p>
+  <p><a href="/template">Download sample spreadsheet</a></p>
 </section>
 
 <section class="card">

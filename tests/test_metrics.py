@@ -16,64 +16,97 @@ def _make_session():
 
 def test_empty_metrics():
     db = _make_session()
-    metrics = compute_metrics(db)
+    m = compute_metrics(db)
+    assert m["total_incidents"] == 0
+    assert m["recordable_count"] == 0
+    assert m["recordable_rate_pct"] == 0
+    assert m["days_since_last_incident"] is None
+    assert m["days_since_last_recordable"] is None
+    assert m["monthly_trend"] == {"labels": [], "recordable": [], "non_recordable": []}
 
-    assert metrics["total_incidents"] == 0
-    assert metrics["days_since_last_incident"] is None
-    assert metrics["monthly_trend"] == {"labels": [], "counts": []}
 
-
-def test_metrics_computation():
+def test_metrics_with_data():
     db = _make_session()
-    upload = Upload(filename="t.csv", row_count=3)
+    upload = Upload(filename="t.xlsx", row_count=4)
     db.add(upload)
     db.flush()
 
     today = date.today()
-    db.add_all(
-        [
-            Incident(
-                upload_id=upload.id,
-                date=today - timedelta(days=5),
-                department="A",
-                incident_type="Injury",
-                severity="Lost Time",
-                days_lost=4,
-                status="Open",
-            ),
-            Incident(
-                upload_id=upload.id,
-                date=today - timedelta(days=40),
-                department="B",
-                incident_type="Near Miss",
-                severity="First Aid",
-                days_lost=0,
-                status="Closed",
-            ),
-            Incident(
-                upload_id=upload.id,
-                date=today - timedelta(days=2),
-                department="A",
-                incident_type="Injury",
-                severity="Recordable",
-                days_lost=1,
-                status="Open",
-            ),
-        ]
-    )
+    incidents = [
+        Incident(
+            upload_id=upload.id,
+            incident_date=today - timedelta(days=2),
+            store_location="11 - Sulphur",
+            incident_type="Employee Incident",
+            recordable=True,
+            body_part="Back",
+            injury_cause="Exertion - Lifting",
+            video_available="Yes",
+            drug_screen="Yes",
+            photos_info="3 by manager",
+            employee_statement="Yes",
+        ),
+        Incident(
+            upload_id=upload.id,
+            incident_date=today - timedelta(days=10),
+            store_location="13 - Lake Charles",
+            incident_type="Customer Incident",
+            recordable=False,
+            customer_statement="Yes",
+        ),
+        Incident(
+            upload_id=upload.id,
+            incident_date=today - timedelta(days=400),
+            store_location="11 - Sulphur",
+            incident_type="Employee Incident",
+            recordable=True,
+            body_part="Knee",
+            injury_cause="Slip, Trip or Fall - Same Level",
+            video_available="No",
+            drug_screen="No",
+            photos_info="",
+            employee_statement="No",
+        ),
+        Incident(
+            upload_id=upload.id,
+            incident_date=today - timedelta(days=5),
+            store_location="22 - Walker",
+            incident_type="Employee Incident",
+            recordable=False,
+            body_part="Back",
+            injury_cause="Exertion - Lifting",
+            video_available="Yes",
+            drug_screen="No",
+            photos_info="1 by associate",
+            employee_statement="Yes",
+        ),
+    ]
+    db.add_all(incidents)
     db.commit()
 
-    metrics = compute_metrics(db)
+    m = compute_metrics(db)
+    assert m["total_incidents"] == 4
+    assert m["recordable_count"] == 2
+    assert m["non_recordable_count"] == 2
+    assert m["recordable_rate_pct"] == 50
+    assert m["days_since_last_incident"] == 2
+    assert m["days_since_last_recordable"] == 2
+    assert m["injury_total"] == 3
 
-    assert metrics["total_incidents"] == 3
-    assert metrics["incidents_last_30_days"] == 2
-    assert metrics["days_since_last_incident"] == 2
-    assert metrics["lost_time_count"] == 1
-    assert metrics["total_lost_days"] == 5
-    assert metrics["open_corrective_actions"] == 2
+    by_store = dict(zip(m["by_store"]["labels"], m["by_store"]["counts"]))
+    assert by_store["11 - Sulphur"] == 2
 
-    by_dept = dict(
-        zip(metrics["by_department"]["labels"], metrics["by_department"]["counts"])
+    by_body = dict(
+        zip(m["by_body_part"]["labels"], m["by_body_part"]["counts"])
     )
-    assert by_dept["A"] == 2
-    assert by_dept["B"] == 1
+    assert by_body["Back"] == 2
+
+    by_type = dict(zip(m["by_type"]["labels"], m["by_type"]["counts"]))
+    assert by_type["Employee Incident"] == 3
+    assert by_type["Customer Incident"] == 1
+
+    # Video Yes/No → 2 yes / 1 no = 67%
+    pcts = dict(zip(m["compliance"]["labels"], m["compliance"]["percentages"]))
+    assert pcts["Video available"] == 67
+    # Drug screen: 1 yes / 2 no = 33%
+    assert pcts["Drug screen"] == 33

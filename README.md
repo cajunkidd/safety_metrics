@@ -7,11 +7,14 @@ A web application for the safety department to upload incident data
 
 - Username/password login with role-based access (admin / viewer)
 - One-time in-app setup wizard for the first admin user
-- Upload incident records from a CSV or Excel spreadsheet (admin only)
-- Automatic validation with clear, per-row error reporting
-- KPI summary: total incidents, last 30 days, days since last incident,
-  lost-time incidents, total lost workdays, open corrective actions
-- Charts: monthly incident trend, incidents by type / severity / department
+- Upload incident-form exports (Excel or CSV, admin only) with
+  automatic validation and per-row error reporting
+- KPI summary: total incidents, recordable count, recordable rate %,
+  days since last incident, days since last recordable incident
+- Charts: stacked monthly trend (recordable vs non-recordable),
+  by store location, customer vs employee, top body parts injured,
+  top primary causes of injury, documentation compliance bars
+- CSV and PDF report exports (date-stamped filenames)
 - Upload history with the ability to remove a previous upload
 - Admin-only user management screen
 
@@ -52,21 +55,25 @@ startup; this works but invalidates all sessions on every restart.
 
 ## Spreadsheet format
 
-Uploads must include these columns (column names are matched
-case-insensitively, spaces are allowed):
+Uploads should be exports of the safety manager's incident form
+(Google Forms / Microsoft Forms style). Required columns:
 
-| Column          | Required | Notes                                   |
-|-----------------|----------|-----------------------------------------|
-| `date`          | yes      | Incident date                           |
-| `department`    | yes      | Site or department                      |
-| `incident_type` | yes      | e.g. Injury, Near Miss, Property Damage |
-| `severity`      | yes      | e.g. First Aid, Recordable, Lost Time   |
-| `description`   | no       | Free text                               |
-| `days_lost`     | no       | Lost workdays (number)                  |
-| `status`        | no       | `Open` / `Closed` (corrective action)   |
+| Column                                  | Notes                                |
+|-----------------------------------------|--------------------------------------|
+| `When did this incident take place?`    | Incident date                        |
+| `Store Location`                        | e.g. `11 - Sulphur`                  |
+| `What type of incident is this?`        | Customer Incident / Employee Incident |
+| `Recordable`                            | `Yes` / `No`                         |
 
-Download a ready-to-use template from the **Upload Data** page, or see
-`sample_data/incidents_template.csv`.
+Other form fields are imported automatically when present and used
+where available — body part, primary cause of injury, video/drug-screen
+status, photo and witness statement counts, etc. The form repeats some
+questions across conditional branches; the parser coalesces those into
+one logical field per row.
+
+A sample spreadsheet is bundled at
+`sample_data/incidents_template.xlsx` and can be downloaded from the
+**Upload Data** page in-app.
 
 ## Tests
 

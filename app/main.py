@@ -24,12 +24,12 @@ from app.auth import (
 )
 from app.database import get_db, init_db
 from app.export import generate_csv, generate_pdf
-from app.ingest import ALL_COLUMNS, IngestError, parse_spreadsheet
+from app.ingest import REQUIRED_HEADERS_HUMAN, IngestError, parse_spreadsheet
 from app.metrics import compute_metrics
 from app.models import ROLE_ADMIN, VALID_ROLES, Incident, Upload, User
 
 BASE_DIR = Path(__file__).resolve().parent
-TEMPLATE_FILE = BASE_DIR.parent / "sample_data" / "incidents_template.csv"
+TEMPLATE_FILE = BASE_DIR.parent / "sample_data" / "incidents_template.xlsx"
 
 SECRET_KEY = os.environ.get("SAFETY_METRICS_SECRET_KEY")
 if not SECRET_KEY:
@@ -198,7 +198,7 @@ def upload_form(
     return _render(
         request,
         "upload.html",
-        {"user": user, "uploads": uploads, "expected_columns": ALL_COLUMNS},
+        {"user": user, "uploads": uploads, "required_columns": REQUIRED_HEADERS_HUMAN},
     )
 
 
@@ -210,7 +210,7 @@ async def upload_file(
     db: Session = Depends(get_db),
 ):
     content = await file.read()
-    context = {"user": user, "expected_columns": ALL_COLUMNS}
+    context = {"user": user, "required_columns": REQUIRED_HEADERS_HUMAN}
 
     if not content:
         context["error"] = "The uploaded file is empty."
@@ -261,8 +261,10 @@ def delete_upload(
 def download_template(_user: User = Depends(require_user)):
     return FileResponse(
         TEMPLATE_FILE,
-        media_type="text/csv",
-        filename="incidents_template.csv",
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        filename="incidents_template.xlsx",
     )
 
 

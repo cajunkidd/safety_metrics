@@ -6,83 +6,128 @@ import pytest
 from app.ingest import IngestError, parse_spreadsheet
 
 
-def _csv(text: str) -> bytes:
-    return text.encode("utf-8")
+def _df_to_xlsx(df: pd.DataFrame) -> bytes:
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+    return buf.getvalue()
 
 
-def test_parse_valid_csv():
-    csv = (
-        "date,department,incident_type,severity,days_lost,status\n"
-        "2026-01-05,Warehouse,Injury,Recordable,2,Closed\n"
-    )
-    records, errors = parse_spreadsheet(_csv(csv), "data.csv")
+def _df_to_csv(df: pd.DataFrame) -> bytes:
+    return df.to_csv(index=False).encode("utf-8")
+
+
+def _valid_form_row(**overrides):
+    base = {
+        "Recordable": "Yes",
+        "When did this incident take place?": "2024-05-01",
+        "At approximately what time?": "13:30",
+        "Store Location": "12 - Lafayette",
+        "What type of incident is this?": "Employee Incident",
+        "Who is completing this form?": "Jane Doe",
+        "What is your position with the company?": "HR",
+        "Summarize the Incident:": "Slipped on wet floor.",
+        "What part of the body was most severely injured?": "Knee",
+        "Side of Body?": "Right",
+        "What was the primary cause of the injury?": "Slip, Trip or Fall - Same Level",
+        "Is there video footage of the incident available?": "Yes",
+        "Was a drug screen complete by associate involved?": "No",
+        "How many photos were taken and by whom?": "5 by manager",
+        "How many witness statements have been received, total?": "2",
+        "Did employee involved give written statement?": "Yes",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_parse_valid_xlsx():
+    df = pd.DataFrame([_valid_form_row()])
+    records, errors = parse_spreadsheet(_df_to_xlsx(df), "form.xlsx")
 
     assert errors == []
     assert len(records) == 1
-    record = records[0]
-    assert record["department"] == "Warehouse"
-    assert record["days_lost"] == 2.0
-    assert str(record["date"]) == "2026-01-05"
+    r = records[0]
+    assert str(r["incident_date"]) == "2024-05-01"
+    assert r["store_location"] == "12 - Lafayette"
+    assert r["incident_type"] == "Employee Incident"
+    assert r["recordable"] is True
+    assert r["body_part"] == "Knee"
+    assert r["video_available"] == "Yes"
+
+
+def test_parse_valid_csv():
+    df = pd.DataFrame([_valid_form_row(Recordable="No")])
+    records, errors = parse_spreadsheet(_df_to_csv(df), "form.csv")
+    assert errors == []
+    assert records[0]["recordable"] is False
 
 
 def test_missing_required_column_raises():
-    csv = "date,department,incident_type\n2026-01-05,Warehouse,Injury\n"
-    with pytest.raises(IngestError):
-        parse_spreadsheet(_csv(csv), "data.csv")
-
-
-def test_invalid_rows_are_reported():
-    csv = (
-        "date,department,incident_type,severity\n"
-        "not-a-date,Warehouse,Injury,Recordable\n"
-        "2026-02-01,,Injury,Recordable\n"
-        "2026-03-01,Shipping,Near Miss,First Aid\n"
+    df = pd.DataFrame(
+        [
+            {
+                "Recordable": "Yes",
+                "When did this incident take place?": "2024-05-01",
+                # Store Location and incident type missing on purpose
+            }
+        ]
     )
-    records, errors = parse_spreadsheet(_csv(csv), "data.csv")
-
-    assert len(records) == 1
-    assert len(errors) == 2
-    assert errors[0]["row"] == 2
-    assert errors[1]["row"] == 3
+    with pytest.raises(IngestError) as exc:
+        parse_spreadsheet(_df_to_xlsx(df), "form.xlsx")
+    assert "Store Location" in str(exc.value)
 
 
 def test_unsupported_file_type_raises():
     with pytest.raises(IngestError):
-        parse_spreadsheet(b"anything", "data.txt")
+        parse_spreadsheet(b"x", "data.txt")
 
 
-def test_negative_days_lost_is_an_error():
-    csv = (
-        "date,department,incident_type,severity,days_lost\n"
-        "2026-01-05,Warehouse,Injury,Recordable,-3\n"
+def test_bad_recordable_value_reported():
+    df = pd.DataFrame(
+        [
+            _valid_form_row(Recordable="MAYBE"),
+            _valid_form_row(),
+        ]
     )
-    records, errors = parse_spreadsheet(_csv(csv), "data.csv")
+    records, errors = parse_spreadsheet(_df_to_xlsx(df), "form.xlsx")
+    assert len(records) == 1
+    assert len(errors) == 1
+    assert "Recordable" in errors[0]["messages"][0]
+
+
+def test_invalid_date_reported():
+    df = pd.DataFrame(
+        [_valid_form_row(**{"When did this incident take place?": "not-a-date"})]
+    )
+    records, errors = parse_spreadsheet(_df_to_xlsx(df), "form.xlsx")
     assert records == []
     assert len(errors) == 1
 
 
-def test_column_names_are_normalized():
-    csv = (
-        " Date , Department , Incident Type , Severity \n"
-        "2026-01-05,Warehouse,Injury,Recordable\n"
-    )
-    records, errors = parse_spreadsheet(_csv(csv), "data.csv")
-    assert errors == []
-    assert len(records) == 1
-
-
-def test_parse_excel_file():
+def test_duplicate_branch_columns_coalesce():
+    # The form repeats some questions per branch; pandas appends ".1".
+    row = _valid_form_row()
+    # Remove first occurrence; only the ".1" suffix copy has the answer.
+    row.pop("Is there video footage of the incident available?")
     df = pd.DataFrame(
-        {
-            "date": ["2026-01-05"],
-            "department": ["Assembly"],
-            "incident_type": ["Spill"],
-            "severity": ["First Aid"],
-        }
+        [
+            {
+                **row,
+                "Is there video footage of the incident available?": None,
+                "Is there video footage of the incident available?.1": "Yes",
+            }
+        ]
     )
-    buf = io.BytesIO()
-    df.to_excel(buf, index=False)
-
-    records, errors = parse_spreadsheet(buf.getvalue(), "data.xlsx")
+    records, errors = parse_spreadsheet(_df_to_xlsx(df), "form.xlsx")
     assert errors == []
-    assert records[0]["incident_type"] == "Spill"
+    assert records[0]["video_available"] == "Yes"
+
+
+def test_uploaded_sample_template_parses():
+    with open("sample_data/incidents_template.xlsx", "rb") as f:
+        records, errors = parse_spreadsheet(f.read(), "incidents_template.xlsx")
+    assert errors == []
+    assert len(records) == 30
+    # Spot-check a couple of fields are populated.
+    assert any(r["body_part"] for r in records)
+    assert any(r["recordable"] for r in records)
+    assert any(not r["recordable"] for r in records)

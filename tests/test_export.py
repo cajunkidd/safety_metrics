@@ -1,6 +1,6 @@
 from datetime import date
 
-CSV_TEMPLATE_PATH = "sample_data/incidents_template.csv"
+SAMPLE_PATH = "sample_data/incidents_template.xlsx"
 
 
 def _setup_admin_and_upload(client):
@@ -9,10 +9,10 @@ def _setup_admin_and_upload(client):
         data={"username": "admin", "password": "adminpass1"},
         follow_redirects=False,
     )
-    with open(CSV_TEMPLATE_PATH, "rb") as f:
+    with open(SAMPLE_PATH, "rb") as f:
         client.post(
             "/upload",
-            files={"file": ("incidents.csv", f.read(), "text/csv")},
+            files={"file": ("incidents.xlsx", f.read(), "application/octet-stream")},
             follow_redirects=False,
         )
 
@@ -35,11 +35,9 @@ def test_csv_export_with_data(client):
 
     body = resp.content.decode("utf-8")
     lines = body.strip().splitlines()
-    assert lines[0] == (
-        "date,department,incident_type,severity,description,days_lost,status"
-    )
-    # Template has 10 records → 1 header + 10 data lines
-    assert len(lines) == 11
+    assert lines[0].startswith("incident_date,incident_time,store_location")
+    # Sample has 30 records → 1 header + 30 data lines
+    assert len(lines) == 31
 
 
 def test_csv_export_with_no_data(client):
@@ -65,7 +63,7 @@ def test_pdf_export_with_data(client):
         resp.headers["content-disposition"]
     )
     assert resp.content.startswith(b"%PDF-")
-    assert len(resp.content) > 5000  # contains charts → nontrivial size
+    assert len(resp.content) > 5000
 
 
 def test_pdf_export_with_no_data(client):

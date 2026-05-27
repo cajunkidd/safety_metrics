@@ -210,3 +210,33 @@ th { color: var(--muted); font-weight: 600; }
   font-weight: 500;
 }
 .btn-secondary:hover { background: var(--accent); color: #fff; }
+
+/* Submission form */
+.submit-form { max-width: 720px; }
+.form-section h2 {
+  font-size: 1.05rem;
+  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+}
+.form-row textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.form-row .required { color: #dc2626; }
+.form-error {
+  color: #991b1b;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 20px 0;
+}

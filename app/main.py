@@ -24,6 +24,11 @@ from app.auth import (
 )
 from app.database import get_db, init_db
 from app.export import generate_csv, generate_pdf
+from app.incident_form import (
+    INCIDENT_FORM_SECTIONS,
+    all_field_names,
+    required_field_names,
+)
 from app.ingest import REQUIRED_HEADERS_HUMAN, IngestError, parse_spreadsheet
 from app.metrics import compute_metrics
 from app.models import ROLE_ADMIN, VALID_ROLES, Incident, Upload, User
@@ -183,6 +188,139 @@ def api_metrics(
     db: Session = Depends(get_db),
 ):
     return compute_metrics(db)
+
+
+# ---------- Submit a single incident ----------
+
+
+# Fields the submission form fills directly into the typed Incident columns.
+_TYPED_FIELDS_FROM_FORM = {
+    "incident_date": "When did this incident take place?",
+    "incident_time": "At approximately what time?",
+    "store_location": "Store Location",
+    "incident_type": "What type of incident is this?",
+    "reporter": "Who is completing this form?",
+    "reporter_position": "What is your position with the company?",
+    "summary": "Summarize the Incident:",
+    "body_part": "What part of the body was most severely injured?",
+    "body_side": "Side of Body?",
+    "injury_cause": "What was the primary cause of the injury?",
+    "customer_name": "Customer Name",
+    "employee_name": "Employee Name",
+    "customer_statement": "Did customer give written statement?",
+    "employee_statement": "Did employee involved give written statement?",
+    "video_available": "Is there video footage of the incident available?",
+    "drug_screen": "Was a drug screen complete by associate involved?",
+    "photos_info": "How many photos were taken and by whom?",
+    "witnesses_info": "How many witness statements have been received, total?",
+}
+
+
+@app.get("/submit", response_class=HTMLResponse)
+def submit_form(
+    request: Request,
+    user: User = Depends(require_user),
+):
+    success = request.query_params.get("success") == "1"
+    return _render(
+        request,
+        "submit.html",
+        {
+            "user": user,
+            "sections": INCIDENT_FORM_SECTIONS,
+            "values": {},
+            "errors": {},
+            "success": success,
+            "form_error": None,
+        },
+    )
+
+
+@app.post("/submit", response_class=HTMLResponse)
+async def submit_incident(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    form = await request.form()
+    values = {name: (form.get(name, "") or "").strip() for name in all_field_names()}
+
+    errors = {
+        name: "This field is required."
+        for name in required_field_names()
+        if not values[name]
+    }
+
+    incident_date = None
+    if values["When did this incident take place?"] and not errors.get(
+        "When did this incident take place?"
+    ):
+        try:
+            incident_date = date.fromisoformat(
+                values["When did this incident take place?"]
+            )
+        except ValueError:
+            errors["When did this incident take place?"] = "Use YYYY-MM-DD."
+
+    recordable_raw = values["Recordable"]
+    if recordable_raw and recordable_raw not in ("Yes", "No"):
+        errors["Recordable"] = "Choose Yes or No."
+
+    if errors:
+        return _render(
+            request,
+            "submit.html",
+            {
+                "user": user,
+                "sections": INCIDENT_FORM_SECTIONS,
+                "values": values,
+                "errors": errors,
+                "success": False,
+                "form_error": "Please fix the highlighted fields.",
+            },
+            status_code=400,
+        )
+
+    raw_data = {k: v for k, v in values.items() if v}
+
+    upload = Upload(
+        filename=f"Manual entry — {user.username}", row_count=1
+    )
+    db.add(upload)
+    db.flush()
+
+    typed = {
+        attr: (values[header] or None)
+        for attr, header in _TYPED_FIELDS_FROM_FORM.items()
+    }
+    db.add(
+        Incident(
+            upload_id=upload.id,
+            incident_date=incident_date,
+            store_location=typed["store_location"],
+            incident_type=typed["incident_type"],
+            recordable=(recordable_raw == "Yes"),
+            reporter=typed["reporter"],
+            reporter_position=typed["reporter_position"],
+            summary=typed["summary"],
+            incident_time=typed["incident_time"],
+            body_part=typed["body_part"],
+            body_side=typed["body_side"],
+            injury_cause=typed["injury_cause"],
+            customer_name=typed["customer_name"],
+            employee_name=typed["employee_name"],
+            customer_statement=typed["customer_statement"],
+            employee_statement=typed["employee_statement"],
+            video_available=typed["video_available"],
+            drug_screen=typed["drug_screen"],
+            photos_info=typed["photos_info"],
+            witnesses_info=typed["witnesses_info"],
+            raw_data=raw_data,
+        )
+    )
+    db.commit()
+
+    return RedirectResponse("/submit?success=1", status_code=303)
 
 
 # ---------- Upload (admin only) ----------

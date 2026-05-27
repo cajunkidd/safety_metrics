@@ -9,6 +9,9 @@ A web application for the safety department to upload incident data
 - One-time in-app setup wizard for the first admin user
 - Upload incident-form exports (Excel or CSV, admin only) with
   automatic validation and per-row error reporting
+- In-app **Submit Incident** form mirroring the safety manager's
+  spreadsheet form (sections appear/disappear based on incident type
+  and what's being reported)
 - KPI summary: total incidents, recordable count, recordable rate %,
   days since last incident, days since last recordable incident
 - Charts: stacked monthly trend (recordable vs non-recordable),

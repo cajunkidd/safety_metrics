@@ -173,6 +173,24 @@ def _parse_row(row, index):
         v = _first_value(row, index[field])
         return None if v is None else str(v).strip() or None
 
+    raw_data = {}
+    for col in row.index:
+        val = row[col]
+        if pd.isna(val):
+            continue
+        # Strip pandas dedup suffix so keys match original form headers.
+        key = _SUFFIX_RE.sub("", str(col)).strip()
+        if not key or key.startswith("Unnamed"):
+            continue
+        if hasattr(val, "isoformat"):
+            text = val.isoformat()
+        else:
+            text = str(val).strip()
+        if not text:
+            continue
+        # First non-empty value for each logical header wins.
+        raw_data.setdefault(key, text)
+
     return {
         "incident_date": incident_date,
         "incident_time": _parse_time(_first_value(row, index["incident_time"])),
@@ -193,6 +211,7 @@ def _parse_row(row, index):
         "drug_screen": _str("drug_screen"),
         "photos_info": _str("photos_info"),
         "witnesses_info": _str("witnesses_info"),
+        "raw_data": raw_data,
     }, []
 
 

@@ -12,6 +12,7 @@
     <nav>
       {% if user %}
         <a href="/">Dashboard</a>
+        <a href="/submit">Submit Incident</a>
         {% if user.role == 'admin' %}
           <a href="/upload">Upload Data</a>
           <a href="/users">Users</a>

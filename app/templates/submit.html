@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Submit Incident - Safety Metrics{% endblock %}
+
+{% block content %}
+<h1>Submit New Incident</h1>
+
+{% if success %}
+  <div class="alert alert-success">
+    Incident submitted successfully. <a href="/">View dashboard</a>
+    or <a href="/submit">submit another</a>.
+  </div>
+{% endif %}
+
+{% if form_error %}
+  <div class="alert alert-error">{{ form_error }}</div>
+{% endif %}
+
+<form action="/submit" method="post" class="submit-form">
+  {% for section in sections %}
+  <section
+    class="card form-section"
+    id="section-{{ section.id }}"
+    {% if section.show_when %}
+      data-show-when="{{ section.show_when[0] }}"
+      data-show-value="{{ section.show_when[1] }}"
+    {% endif %}
+  >
+    <h2>{{ section.title }}</h2>
+    {% for field in section.fields %}
+    {% set fid = section.id ~ '-' ~ loop.index %}
+    <div class="form-row">
+      <label for="f-{{ fid }}">
+        {{ field.label }}{% if field.required %} <span class="required">*</span>{% endif %}
+      </label>
+      {% if field.type == 'textarea' %}
+        <textarea
+          id="f-{{ fid }}"
+          name="{{ field.name }}"
+          rows="3"
+          {% if field.required %}required{% endif %}
+        >{{ values.get(field.name, '') }}</textarea>
+      {% elif field.type == 'select' %}
+        <select
+          id="f-{{ fid }}"
+          name="{{ field.name }}"
+          {% if field.required %}required{% endif %}
+          {% if field.trigger %}data-trigger="{{ field.trigger }}"{% endif %}
+        >
+          {% for opt in field.options %}
+            <option value="{{ opt }}" {% if values.get(field.name, '') == opt %}selected{% endif %}>
+              {{ opt or '— Select —' }}
+            </option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input
+          type="{{ field.type }}"
+          id="f-{{ fid }}"
+          name="{{ field.name }}"
+          value="{{ values.get(field.name, '') }}"
+          {% if field.required %}required{% endif %}
+          {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}
+        >
+      {% endif %}
+      {% if errors.get(field.name) %}
+        <span class="form-error">{{ errors[field.name] }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <div class="form-actions">
+    <button type="submit">Submit incident</button>
+    <a href="/" class="btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const sections = document.querySelectorAll('[data-show-when]');
+    const triggers = document.querySelectorAll('[data-trigger]');
+
+    function refresh() {
+      const state = {};
+      triggers.forEach(el => { state[el.dataset.trigger] = el.value; });
+      sections.forEach(sec => {
+        const key = sec.dataset.showWhen;
+        const want = sec.dataset.showValue;
+        sec.style.display = state[key] === want ? '' : 'none';
+      });
+    }
+    triggers.forEach(el => el.addEventListener('change', refresh));
+    refresh();
+  })();
+</script>
+{% endblock %}

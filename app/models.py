@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -65,5 +65,9 @@ class Incident(Base):
     drug_screen = Column(String)  # Yes / No
     photos_info = Column(String)  # free-text count
     witnesses_info = Column(String)  # free-text count
+
+    # Full submitted payload (form questions → answers). Lets us preserve
+    # every field from the source form without expanding the schema.
+    raw_data = Column(JSON, default=dict)
 
     upload = relationship("Upload", back_populates="incidents")
